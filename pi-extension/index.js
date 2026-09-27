@@ -202,6 +202,17 @@ export default function ponytailExtension(pi) {
   });
 
   pi.on("before_agent_start", async (event) => {
+    const options = event?.systemPromptOptions;
+    if (options && options.forceSystemPrompt === undefined
+      && options.sections !== null && typeof options.sections === "object" && Array.isArray(options.skills)) {
+      try {
+        if (!currentMode || currentMode === "off") delete options.sections.ponytail;
+        else options.sections.ponytail = getPonytailInstructions(currentMode);
+        return;
+      } catch (error) {
+        console.error("Ponytail structured prompt failed; using legacy prompt:", error);
+      }
+    }
     if (!currentMode || currentMode === "off") return;
     // Guard a null/undefined event or a missing systemPrompt: don't crash, and
     // don't prepend the literal string "undefined" to the prompt (#439, #440).
