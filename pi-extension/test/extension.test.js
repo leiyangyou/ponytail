@@ -58,6 +58,32 @@ function withTempConfig(fn) {
     });
 }
 
+test("structured prompt reapplies every mode and keeps opaque hosts on the legacy path", async () => withTempConfig(async () => {
+  const { commands, events } = createPiHarness();
+  const ctx = createCommandContext();
+  const hook = events.get("before_agent_start");
+  for (const mode of ["lite", "full", "ultra"]) {
+    await commands.get("ponytail").handler(mode, ctx);
+    const legacy = await hook({ systemPrompt: "BASE" }, ctx);
+    for (let turn = 0; turn < 2; turn++) {
+      const options = { sections: { foreign: "keep" }, skills: [] };
+      const result = await hook({ systemPrompt: "BASE", systemPromptOptions: options }, ctx);
+      assert.equal(result, undefined);
+      assert.equal(options.sections.foreign, "keep");
+      assert.ok(options.sections.ponytail.startsWith(`PONYTAIL MODE ACTIVE — level: ${mode}`));
+      assert.equal(`BASE\n\n${options.sections.ponytail}`, legacy.systemPrompt);
+    }
+    const forced = { forceSystemPrompt: "BASE", sections: {}, skills: [] };
+    assert.deepEqual(await hook({ systemPrompt: "BASE", systemPromptOptions: forced }, ctx), legacy);
+    assert.deepEqual(forced.sections, {});
+  }
+  await commands.get("ponytail").handler("off", ctx);
+  const options = { sections: { ponytail: "obsolete", foreign: "keep" }, skills: [] };
+  assert.equal(await hook({ systemPrompt: "BASE", systemPromptOptions: options }, ctx), undefined);
+  assert.deepEqual(options.sections, { foreign: "keep" });
+  assert.equal(await hook({ systemPrompt: "BASE" }, ctx), undefined);
+}));
+
 test("extension registers Ponytail commands", () => {
   const { commands } = createPiHarness();
 
